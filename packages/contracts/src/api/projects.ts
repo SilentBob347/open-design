@@ -113,6 +113,9 @@ export interface ProjectMetadata {
   promptTemplate?: PromptTemplateMetadata;
   // Absolute paths to local code folders the agent can read via --add-dir.
   linkedDirs?: string[];
+  // Batch/API-created projects can opt out of the initial discovery form so
+  // the first agent turn builds immediately from the submitted brief.
+  skipDiscoveryBrief?: boolean;
 }
 
 export interface Project {
@@ -152,6 +155,8 @@ export interface CreateProjectRequest {
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
   customInstructions?: string;
+  /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
+  skipDiscoveryBrief?: boolean;
 }
 
 export interface UpdateProjectRequest {

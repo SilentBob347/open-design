@@ -27,6 +27,13 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toMatch(/TodoWrite/);
     });
 
+    it('does not instruct agents to ask for a second visual-direction picker', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('<question-form id="direction"');
+      expect(prompt).not.toContain('Pick a visual direction');
+      expect(prompt).toContain('if a design system is active, use it as the visual direction without asking again');
+    });
+
     it('does not inject the API-mode preamble', () => {
       const prompt = composeSystemPrompt({});
       expect(prompt).not.toMatch(/API mode — no tools available/i);
