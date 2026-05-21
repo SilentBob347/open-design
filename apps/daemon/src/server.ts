@@ -8550,6 +8550,7 @@ export async function startServer({
     streamFormat,
     connectedExternalMcp,
     appliedPluginSnapshotId,
+    interfaceLocale,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -8897,6 +8898,7 @@ export async function startServer({
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       streamFormat,
+      interfaceLocale,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
@@ -9008,6 +9010,7 @@ export async function startServer({
       reasoning,
       research,
       context,
+      locale,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -9247,6 +9250,7 @@ export async function startServer({
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+        interfaceLocale: typeof locale === 'string' ? locale : undefined,
       });
 
     // Make skill side files reachable through three layers, in order of

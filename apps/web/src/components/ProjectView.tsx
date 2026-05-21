@@ -142,6 +142,12 @@ import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 
+function readCurrentInterfaceLocale(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const lang = document.documentElement.getAttribute('lang')?.trim();
+  return lang || undefined;
+}
+
 interface Props {
   project: Project;
   routeFileName: string | null;
@@ -1364,6 +1370,7 @@ export function ProjectView({
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
       userInstructions: config.customInstructions,
       projectInstructions: project.customInstructions,
+      interfaceLocale: readCurrentInterfaceLocale(),
     });
   }, [
     project.skillId,
@@ -2415,6 +2422,7 @@ export function ProjectView({
           attachments: attachments.map((a) => a.path),
           commentAttachments,
           research: meta?.research,
+          locale: readCurrentInterfaceLocale(),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           onRunCreated: (runId) => {

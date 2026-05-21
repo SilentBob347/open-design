@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuestionFormView, parseSubmittedAnswers } from '../../src/components/QuestionForm';
 import type { QuestionForm } from '../../src/artifacts/question-form';
+import { I18nProvider } from '../../src/i18n';
 
 const form: QuestionForm = {
   id: 'discovery',
@@ -106,6 +107,38 @@ const selectObjectForm = {
     },
   ],
 } as QuestionForm;
+
+const quickBriefForm: QuestionForm = {
+  id: 'discovery',
+  title: 'Quick brief — 30 seconds',
+  description: "I'll lock these in before building. Skip what doesn't apply — I'll fill defaults.",
+  questions: [
+    {
+      id: 'audience',
+      label: 'Target user',
+      type: 'text',
+      placeholder: 'e.g. early-stage investors, dev-tools buyers, internal exec review',
+    },
+    {
+      id: 'tone',
+      label: 'Visual tone',
+      type: 'checkbox',
+      options: [
+        { label: 'Modern minimal', value: 'Modern minimal' },
+        { label: 'Tech / utility', value: 'Tech / utility' },
+      ],
+    },
+    {
+      id: 'brand',
+      label: 'Brand context',
+      type: 'radio',
+      options: [
+        { label: 'Pick a direction for me', value: 'pick_direction' },
+        { label: "I have a brand spec — I'll share it", value: 'brand_spec' },
+      ],
+    },
+  ],
+};
 
 describe('QuestionFormView', () => {
   afterEach(() => cleanup());
@@ -241,5 +274,33 @@ describe('QuestionFormView', () => {
       '- Primary surface: Mobile (iOS/Android) [value: mobile]',
     );
     expect(onSubmit.mock.calls[0]?.[1]).toEqual({ platform: 'mobile' });
+  });
+
+  it('localizes built-in quick brief copy for Simplified Chinese while preserving stable values', () => {
+    const onSubmit = vi.fn();
+    render(
+      <I18nProvider initial="zh-CN">
+        <QuestionFormView form={quickBriefForm} interactive onSubmit={onSubmit} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('快速简报 — 30 秒')).toBeTruthy();
+    expect(screen.getByText('目标用户')).toBeTruthy();
+    expect(screen.getByPlaceholderText('例如：早期投资人、开发工具采购者、内部高管评审')).toBeTruthy();
+    expect(screen.getByText('现代极简')).toBeTruthy();
+    expect(screen.getByText('品牌背景')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('帮我选择方向'));
+    fireEvent.click(screen.getByRole('button', { name: '发送答案' }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0]?.[0]).toContain(
+      '- 品牌背景: 帮我选择方向 [value: pick_direction]',
+    );
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({
+      audience: '',
+      tone: [],
+      brand: 'pick_direction',
+    });
   });
 });

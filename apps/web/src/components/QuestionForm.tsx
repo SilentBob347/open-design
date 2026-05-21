@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useT } from '../i18n';
+import { useI18n, useT, type Locale } from '../i18n';
 import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
 import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
 
@@ -16,9 +16,191 @@ interface Props {
   onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
 }
 
+type ChineseQuestionFormLocale = Extract<Locale, 'zh-CN' | 'zh-TW'>;
+
+const BUILT_IN_FORM_ZH_COPY: Record<ChineseQuestionFormLocale, Record<string, string>> = {
+  'zh-CN': {
+    'A few quick questions': '几个快速问题',
+    'Choose the task type': '选择任务类型',
+    "I'll route this through the right Open Design workflow and lock the brief in one shot. Skip what doesn't apply — I'll fill defaults.":
+      '我会将它路由到合适的 Open Design 工作流，并一次性锁定简报。不适用的可以跳过，我会补上默认值。',
+    'I will route the free-form prompt through the right Open Design workflow.':
+      '我会将自由输入的提示路由到合适的 Open Design 工作流。',
+    'What should I build?': '要构建什么？',
+    Prototype: '原型',
+    'Live artifact': '实时作品',
+    'Slide deck': '幻灯片',
+    Image: '图片',
+    Video: '视频',
+    HyperFrames: 'HyperFrames',
+    Audio: '音频',
+    Other: '其他',
+    'Quick brief': '快速简报',
+    'Quick brief — 30 seconds': '快速简报 — 30 秒',
+    "I'll lock these in before building. Skip what doesn't apply — I'll fill defaults.":
+      '开始构建前我会先锁定这些信息。不适用的可以跳过，我会补上默认值。',
+    'What are we making?': '我们要做什么？',
+    'Slide deck / pitch': '幻灯片 / 路演稿',
+    'Single web prototype / landing': '单页网页原型 / 落地页',
+    'Multi-screen app prototype': '多屏应用原型',
+    'Dashboard / tool UI': '仪表盘 / 工具界面',
+    'Editorial / marketing page': '编辑型 / 营销页面',
+    "Other — I'll describe": '其他 — 我来描述',
+    'Target platform': '目标平台',
+    'Responsive web': '响应式网页',
+    'Desktop web': '桌面网页',
+    'iOS app': 'iOS 应用',
+    'Android app': 'Android 应用',
+    'Tablet': '平板',
+    'Tablet app': '平板应用',
+    'Desktop app': '桌面应用',
+    'Fixed canvas (1920×1080)': '固定画布 (1920×1080)',
+    'Who is this for?': '面向谁？',
+    'Target user': '目标用户',
+    'e.g. early-stage investors, dev-tools buyers, internal exec review':
+      '例如：早期投资人、开发工具采购者、内部高管评审',
+    'Visual tone': '视觉风格',
+    'Visual tone (pick up to two)': '视觉风格（最多选两个）',
+    'Editorial / magazine': '编辑 / 杂志感',
+    'Modern minimal': '现代极简',
+    'Playful / illustrative': '活泼 / 插画感',
+    'Tech / utility': '科技 / 工具感',
+    'Luxury / refined': '奢华 / 精致',
+    'Brutalist / experimental': '粗野 / 实验性',
+    'Human / approachable': '人性化 / 亲和',
+    'Brand context': '品牌背景',
+    'Pick a direction for me': '帮我选择方向',
+    "I have a brand spec — I'll share it": '我有品牌规范 — 我会提供',
+    "Match a reference site / screenshot — I'll attach it": '匹配参考网站 / 截图 — 我会上传',
+    'Roughly how much?': '大概需要多少内容？',
+    'e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens':
+      '例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面',
+    'e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video':
+      '例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面、30 秒视频',
+    'Anything else I should know?': '还有什么需要我知道？',
+    'Any important constraints?': '有什么重要限制？',
+    'Real copy, fonts you must use, things to avoid, deadline…':
+      '真实文案、必须使用的字体、需要避免的内容、截止时间…',
+    'Audience, brand, format, length, aspect ratio, references, things to avoid...':
+      '受众、品牌、格式、长度、宽高比、参考资料、需要避免的内容…',
+    "What's the angle / hook of this dating app?": '这个约会应用的切入点 / 亮点是什么？',
+  },
+  'zh-TW': {
+    'A few quick questions': '幾個快速問題',
+    'Choose the task type': '選擇任務類型',
+    "I'll route this through the right Open Design workflow and lock the brief in one shot. Skip what doesn't apply — I'll fill defaults.":
+      '我會將它路由到合適的 Open Design 工作流程，並一次鎖定簡報。不適用的可以跳過，我會補上預設值。',
+    'I will route the free-form prompt through the right Open Design workflow.':
+      '我會將自由輸入的提示路由到合適的 Open Design 工作流程。',
+    'What should I build?': '要建立什麼？',
+    Prototype: '原型',
+    'Live artifact': '即時作品',
+    'Slide deck': '簡報',
+    Image: '圖片',
+    Video: '影片',
+    HyperFrames: 'HyperFrames',
+    Audio: '音訊',
+    Other: '其他',
+    'Quick brief': '快速簡報',
+    'Quick brief — 30 seconds': '快速簡報 — 30 秒',
+    "I'll lock these in before building. Skip what doesn't apply — I'll fill defaults.":
+      '開始建立前我會先鎖定這些資訊。不適用的可以跳過，我會補上預設值。',
+    'What are we making?': '我們要做什麼？',
+    'Slide deck / pitch': '簡報 / 提案',
+    'Single web prototype / landing': '單頁網頁原型 / 到達頁',
+    'Multi-screen app prototype': '多畫面應用原型',
+    'Dashboard / tool UI': '儀表板 / 工具介面',
+    'Editorial / marketing page': '編輯型 / 行銷頁面',
+    "Other — I'll describe": '其他 — 我來描述',
+    'Target platform': '目標平台',
+    'Responsive web': '響應式網頁',
+    'Desktop web': '桌面網頁',
+    'iOS app': 'iOS 應用',
+    'Android app': 'Android 應用',
+    Tablet: '平板',
+    'Tablet app': '平板應用',
+    'Desktop app': '桌面應用',
+    'Fixed canvas (1920×1080)': '固定畫布 (1920×1080)',
+    'Who is this for?': '面向誰？',
+    'Target user': '目標使用者',
+    'e.g. early-stage investors, dev-tools buyers, internal exec review':
+      '例如：早期投資人、開發工具採購者、內部高階主管審查',
+    'Visual tone': '視覺風格',
+    'Visual tone (pick up to two)': '視覺風格（最多選兩個）',
+    'Editorial / magazine': '編輯 / 雜誌感',
+    'Modern minimal': '現代極簡',
+    'Playful / illustrative': '活潑 / 插畫感',
+    'Tech / utility': '科技 / 工具感',
+    'Luxury / refined': '奢華 / 精緻',
+    'Brutalist / experimental': '粗獷 / 實驗性',
+    'Human / approachable': '人性化 / 親和',
+    'Brand context': '品牌背景',
+    'Pick a direction for me': '幫我選擇方向',
+    "I have a brand spec — I'll share it": '我有品牌規範 — 我會提供',
+    "Match a reference site / screenshot — I'll attach it": '匹配參考網站 / 截圖 — 我會上傳',
+    'Roughly how much?': '大概需要多少內容？',
+    'e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens':
+      '例如：8 頁簡報、1 個到達頁 + 3 個子頁面、4 個行動端畫面',
+    'e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video':
+      '例如：8 頁簡報、1 個到達頁 + 3 個子頁面、4 個行動端畫面、30 秒影片',
+    'Anything else I should know?': '還有什麼需要我知道？',
+    'Any important constraints?': '有什麼重要限制？',
+    'Real copy, fonts you must use, things to avoid, deadline…':
+      '真實文案、必須使用的字體、需要避免的內容、截止時間…',
+    'Audience, brand, format, length, aspect ratio, references, things to avoid...':
+      '受眾、品牌、格式、長度、寬高比、參考資料、需要避免的內容…',
+    "What's the angle / hook of this dating app?": '這個約會應用的切入點 / 亮點是什麼？',
+  },
+};
+
+function localizeBuiltInQuestionForm(form: QuestionForm, locale: Locale): QuestionForm {
+  if (locale !== 'zh-CN' && locale !== 'zh-TW') return form;
+  const copy = BUILT_IN_FORM_ZH_COPY[locale];
+  const translate = (value: string | undefined): string | undefined => {
+    if (value === undefined) return undefined;
+    return copy[value] ?? translateGeneratedQuestion(value, locale) ?? value;
+  };
+  return {
+    ...form,
+    title: translate(form.title) ?? form.title,
+    ...(form.description ? { description: translate(form.description) ?? form.description } : {}),
+    ...(form.submitLabel ? { submitLabel: translate(form.submitLabel) ?? form.submitLabel } : {}),
+    questions: form.questions.map((q) => ({
+      ...q,
+      label: translate(q.label) ?? q.label,
+      ...(q.help ? { help: translate(q.help) ?? q.help } : {}),
+      ...(q.placeholder ? { placeholder: translate(q.placeholder) ?? q.placeholder } : {}),
+      ...(q.options
+        ? {
+            options: q.options.map((option) => ({
+              ...option,
+              label: translate(option.label) ?? option.label,
+              ...(option.description
+                ? { description: translate(option.description) ?? option.description }
+                : {}),
+            })),
+          }
+        : {}),
+    })),
+  };
+}
+
+function translateGeneratedQuestion(value: string, locale: ChineseQuestionFormLocale): string | undefined {
+  if (/^What's the angle \/ hook of this .+\?$/i.test(value)) {
+    return locale === 'zh-CN'
+      ? '这个方案的切入点 / 亮点是什么？'
+      : '這個方案的切入點 / 亮點是什麼？';
+  }
+  return undefined;
+}
+
 export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit }: Props) {
-  const t = useT();
-  const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
+  const { locale, t } = useI18n();
+  const displayForm = useMemo(() => localizeBuiltInQuestionForm(form, locale), [form, locale]);
+  const initial = useMemo(
+    () => buildInitialState(displayForm, submittedAnswers),
+    [displayForm, submittedAnswers],
+  );
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
   const currentAnswers = submittedAnswers ?? answers;
@@ -42,7 +224,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   }
 
   function missingRequired(): string | null {
-    for (const q of form.questions) {
+    for (const q of displayForm.questions) {
       if (!q.required) continue;
       const v = currentAnswers[q.id];
       if (Array.isArray(v) ? v.length === 0 : !(typeof v === 'string' && v.trim().length > 0)) {
@@ -61,11 +243,11 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
       // state of the submit button covers most cases.
       return;
     }
-    onSubmit(formatFormAnswers(form, answers), answers);
+    onSubmit(formatFormAnswers(displayForm, answers), answers);
   }
 
-  const required = form.questions.filter((q) => q.required);
-  const withinSelectionLimits = form.questions.every((q) => {
+  const required = displayForm.questions.filter((q) => q.required);
+  const withinSelectionLimits = displayForm.questions.every((q) => {
     if (q.type !== 'checkbox' || q.maxSelections === undefined) return true;
     const v = currentAnswers[q.id];
     return !Array.isArray(v) || v.length <= q.maxSelections;
@@ -76,19 +258,19 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
   });
 
   return (
-    <div className={`question-form${locked ? ' question-form-locked' : ''}`} data-form-id={form.id}>
+    <div className={`question-form${locked ? ' question-form-locked' : ''}`} data-form-id={displayForm.id}>
       <div className="question-form-head">
         <span className="question-form-icon" aria-hidden>?</span>
         <div className="question-form-titles">
-          <div className="question-form-title">{form.title}</div>
-          {form.description ? (
-            <div className="question-form-desc">{form.description}</div>
+          <div className="question-form-title">{displayForm.title}</div>
+          {displayForm.description ? (
+            <div className="question-form-desc">{displayForm.description}</div>
           ) : null}
         </div>
         {locked ? <span className="question-form-pill">{t('qf.answered')}</span> : null}
       </div>
       <div className="question-form-body">
-        {form.questions.map((q) => {
+        {displayForm.questions.map((q) => {
           const value = currentAnswers[q.id];
           return (
             <div key={q.id} className="qf-field">
@@ -109,7 +291,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                     >
                       <input
                         type="radio"
-                        name={`${form.id}-${q.id}`}
+                        name={`${displayForm.id}-${q.id}`}
                         value={opt.value}
                         checked={value === opt.value}
                         disabled={locked}
@@ -191,7 +373,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                     <DirectionCardView
                       key={card.id}
                       card={card}
-                      formId={form.id}
+                      formId={displayForm.id}
                       questionId={q.id}
                       selected={value === card.id || value === card.label}
                       disabled={locked}
@@ -220,7 +402,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
             disabled={!ready}
             title={ready ? t('qf.submitTitle') : t('qf.submitDisabledTitle')}
           >
-            {form.submitLabel ?? t('qf.submitDefault')}
+            {displayForm.submitLabel ?? t('qf.submitDefault')}
           </button>
         ) : null}
       </div>

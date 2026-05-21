@@ -165,6 +165,41 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // UI locale selected by the user. Prompt copy stays English as the
+  // instruction language, but generated user-facing chat/form copy should
+  // follow this locale.
+  interfaceLocale?: string | undefined;
+}
+
+const LOCALE_DISPLAY_NAMES: Record<string, string> = {
+  ar: 'Arabic',
+  de: 'German',
+  en: 'English',
+  'es-ES': 'Spanish (Spain)',
+  fa: 'Persian',
+  fr: 'French',
+  hu: 'Hungarian',
+  id: 'Indonesian',
+  it: 'Italian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  pl: 'Polish',
+  'pt-BR': 'Portuguese (Brazil)',
+  ru: 'Russian',
+  th: 'Thai',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  'zh-CN': 'Chinese (Simplified)',
+  'zh-TW': 'Chinese (Traditional)',
+};
+
+function renderInterfaceLocalePrompt(interfaceLocale: string | undefined): string | undefined {
+  const locale = interfaceLocale?.trim();
+  if (!locale || locale === 'en') return undefined;
+  const languageName = LOCALE_DISPLAY_NAMES[locale] ?? locale;
+  return `# Current app language
+
+The user is using Open Design in ${languageName} (${locale}). Write user-facing chat prose in that language. When emitting \`<question-form>\`, localize every display string to that language: the prose lead-in, \`title\`, \`description\`, question \`label\`, \`help\`, \`placeholder\`, \`submitLabel\`, and option \`label\` / \`description\`. Keep structural JSON keys, question \`id\` values, and object option \`value\` fields exactly as specified.`;
 }
 
 export function composeSystemPrompt({
@@ -183,6 +218,7 @@ export function composeSystemPrompt({
   streamFormat,
   userInstructions,
   projectInstructions,
+  interfaceLocale,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -206,6 +242,12 @@ export function composeSystemPrompt({
 
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  const localePrompt = renderInterfaceLocalePrompt(interfaceLocale);
+  if (localePrompt) {
+    parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 

@@ -35,6 +35,8 @@ export interface ChatRequest {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  /** UI locale selected by the caller, used to localize generated form copy. */
+  locale?: string;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
