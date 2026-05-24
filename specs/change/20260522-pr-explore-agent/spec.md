@@ -55,13 +55,15 @@ In:
   landing-page build (`package.json`, `pnpm-lock.yaml`,
   `pnpm-workspace.yaml`). PRs touching only other paths skip the
   workflow entirely (no approval prompt, no run).
-- **Manual approval gate (GitHub-native)**: every matching PR
-  triggers a workflow run that enters `pending_deployment_review`
-  state immediately. The run only proceeds after a maintainer in the
-  configured environment's required-reviewers list clicks Approve via
-  the PR's Checks tab. There is no `/explore` slash command, no label
-  gate, no `author_association` auto-trigger. The GitHub environment
-  approval flow is the **only** way an agent run starts.
+- **Manual approval gate (GitHub-native)**: every matching,
+  internal same-repo PR triggers a workflow run that enters
+  `pending_deployment_review` state immediately. "Internal" means the
+  PR author's `author_association` is `OWNER`, `MEMBER`, or
+  `COLLABORATOR`; "same-repo" means
+  `head.repo.full_name == github.repository`. The run only proceeds
+  after a maintainer in the configured environment's required-reviewers
+  list clicks Approve via the PR's Checks tab. There is no `/explore`
+  slash command, no label gate, and no fork-origin path.
 - Each Actions run is bound to one commit SHA. Approving runs the
   agent against that exact SHA; subsequent pushes (new SHA) queue a
   new pending-approval run. A previous approval cannot be reused for
@@ -96,11 +98,14 @@ _"With the exception of `GITHUB_TOKEN`, secrets are not passed to the
 runner when a workflow is triggered from a forked repository."_).
 Since the agent requires `ANTHROPIC_API_KEY` (v1 default — see Cost),
 fork-origin PRs literally cannot execute this workflow even if a
-maintainer approves them. The workflow's top-level `if:` includes
-a same-repo guard (`head.repo.full_name == github.repository`) so
-fork-origin PRs skip before creating an environment approval prompt.
-A pre-agent shell assertion repeats the check as a defensive guard for
-any future compiler/runtime drift.
+maintainer approves them. The workflow's top-level `if:` requires both
+same-repo origin (`head.repo.full_name == github.repository`) and an
+internal author association (`OWNER`, `MEMBER`, or `COLLABORATOR`) so
+external PRs and fork-origin PRs skip before creating an environment
+approval prompt. That includes fork PRs opened by internal members:
+they are still skipped because forked `pull_request` runs do not get
+the required secrets/environment. A pre-agent shell assertion repeats
+both checks as a defensive guard for any future compiler/runtime drift.
 
 A future spec (not this one) covering external-PR support must
 adopt a two-plane architecture (UI execution plane with no LLM
@@ -576,8 +581,8 @@ mechanisms (workflow self-mod, fork-origin, external contributor).
 | Risk | Mitigation |
 |---|---|
 | PR's app code crashes daemon during agent test | Per-PR `OD_E2E_NAMESPACE`, fresh data dir, killed at job end |
-| PR modifies the workflow itself in the same diff as app code | Maintainer sees the full diff (including `.github/workflows/agent-pr-explore.*` changes) in the GitHub approval UI before clicking Approve. Decline if suspicious. No special if-gate needed because the approval IS the gate. |
-| Fork-origin PR or external contributor PR with hostile code | Same as above: approval UI shows full diff, maintainer declines if suspicious. The workflow does not run any of the PR's code until approval. |
+| PR modifies the workflow itself in the same diff as app code | Maintainer sees the full diff (including `.github/workflows/agent-pr-explore.*` changes) in the GitHub approval UI before clicking Approve. Decline if suspicious. |
+| Fork-origin PR or external contributor PR with hostile code | Top-level workflow `if:` requires same-repo origin and `OWNER`/`MEMBER`/`COLLABORATOR` author association, so these PRs skip before environment approval is created. A pre-agent shell assertion repeats both checks defensively. |
 | Agent output triggers harmful action | `gh-aw` threat-detection scans before `safe_outputs` runs; safe_outputs job has only `pull-requests: write` + `contents: read` |
 | Agent reads/leaks `ANTHROPIC_API_KEY` (v1 default) | Stripped from container env via gh-aw's default `--exclude-env`; agent shell `echo $ANTHROPIC_API_KEY` returns empty; auth handled by API proxy. Verified via the compiled lock.yml emitted by `gh aw compile` against v0.74.8. |
 | Agent reads/leaks `CLAUDE_CODE_OAUTH_TOKEN` (not v1 default) | **gh-aw v0.74.8's default `--exclude-env` list strips `ANTHROPIC_API_KEY`, `GITHUB_MCP_SERVER_TOKEN`, `MCP_GATEWAY_API_KEY`, but NOT `CLAUDE_CODE_OAUTH_TOKEN`.** Until we either (a) upstream a PR to extend that list or (b) verify gh-aw exposes a per-workflow `exclude-env` knob and use it, OAuth-mode isolation is undefined and the spec does NOT recommend it as v1 default. Re-evaluated at Phase 3. |
@@ -648,9 +653,10 @@ charter / prompt update. None of them require a code redeploy.
    environment's required-reviewers list on day 1? Recommended P1 =
    `@lefarcen` only (so approval rate stays manageable while we tune
    the prompt and the comment format). P2 expands to the full
-   reviewer pool. Note: the previous draft framed this as restricting
-   *which PRs* are eligible by `author_association` — manual approval
-   makes that obsolete. The relevant control is *who* can approve.
+   reviewer pool. PR eligibility is separately restricted to
+   internal same-repo PRs (`OWNER`/`MEMBER`/`COLLABORATOR` author
+   association plus `head.repo.full_name == github.repository`).
+   The environment controls *who* can approve those eligible runs.
 3. **Failure transparency** — **decoupled from the PR comment path**:
    when the agent run fails (timeout / crash / threat-detection blocks
    output), surface the failure out-of-band via the
