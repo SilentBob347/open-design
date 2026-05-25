@@ -1,7 +1,10 @@
-use launcher_core::{LauncherPathLayout, PayloadEntry};
+use launcher_core::{
+    LAUNCHER_STATE_SCHEMA_VERSION, LauncherPathLayout, LauncherStateSnapshot, PayloadEntry,
+    PendingPromotionPlan, StatePointer, plan_pending_promotion,
+};
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use thiserror::Error;
@@ -12,6 +15,14 @@ pub enum LauncherPlatformError {
     MissingEnv(&'static str),
     #[error("launcher lock is already held: {0}")]
     LockAlreadyHeld(String),
+    #[error("unsupported launcher state schema at {path}: expected {expected}, got {actual}")]
+    UnsupportedStateSchema {
+        actual: u32,
+        expected: u32,
+        path: String,
+    },
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -76,6 +87,71 @@ pub fn ensure_launcher_layout(paths: &LauncherPathLayout) -> Result<(), Launcher
     Ok(())
 }
 
+pub fn read_launcher_state(paths: &LauncherPathLayout) -> Result<LauncherStateSnapshot, LauncherPlatformError> {
+    Ok(LauncherStateSnapshot {
+        current: read_state_pointer(&paths.current_state_path)?,
+        pending: read_state_pointer(&paths.pending_state_path)?,
+        previous: read_state_pointer(&paths.previous_state_path)?,
+    })
+}
+
+pub fn apply_pending_state_promotion(
+    paths: &LauncherPathLayout,
+) -> Result<PendingPromotionPlan, LauncherPlatformError> {
+    ensure_launcher_layout(paths)?;
+    let _lock = LauncherLock::acquire(&paths.state_lock_path)?;
+    let snapshot = read_launcher_state(paths)?;
+    let plan = plan_pending_promotion(&snapshot);
+
+    if plan.promote {
+        if let Some(current) = &plan.current {
+            write_state_pointer(&paths.current_state_path, current)?;
+        }
+        if let Some(previous) = &plan.previous {
+            write_state_pointer(&paths.previous_state_path, previous)?;
+        } else {
+            remove_file_if_exists(&paths.previous_state_path)?;
+        }
+        if plan.remove_pending {
+            remove_file_if_exists(&paths.pending_state_path)?;
+        }
+    }
+
+    Ok(plan)
+}
+
+pub fn read_state_pointer(path: impl AsRef<Path>) -> Result<Option<StatePointer>, LauncherPlatformError> {
+    let path = path.as_ref();
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let pointer: StatePointer = serde_json::from_reader(file)?;
+    if pointer.schema_version != LAUNCHER_STATE_SCHEMA_VERSION {
+        return Err(LauncherPlatformError::UnsupportedStateSchema {
+            actual: pointer.schema_version,
+            expected: LAUNCHER_STATE_SCHEMA_VERSION,
+            path: path.display().to_string(),
+        });
+    }
+    Ok(Some(pointer))
+}
+
+pub fn write_state_pointer(
+    path: impl AsRef<Path>,
+    pointer: &StatePointer,
+) -> Result<(), LauncherPlatformError> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut file = File::create(path)?;
+    serde_json::to_writer_pretty(&mut file, pointer)?;
+    file.write_all(b"\n")?;
+    Ok(())
+}
+
 pub fn spawn_payload(entry: &PayloadEntry, payload_root: impl AsRef<Path>) -> Result<Child, LauncherPlatformError> {
     let payload_root = payload_root.as_ref();
     let executable = resolve_payload_path(payload_root, &entry.executable);
@@ -112,5 +188,13 @@ fn resolve_payload_path(root: &Path, value: &str) -> PathBuf {
         path
     } else {
         root.join(path)
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), LauncherPlatformError> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }

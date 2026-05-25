@@ -31,4 +31,5 @@ cargo fmt --manifest-path apps/launcher/Cargo.toml --check
 cargo test --manifest-path apps/launcher/Cargo.toml --workspace
 cargo build --manifest-path apps/launcher/Cargo.toml --release
 cargo run --manifest-path apps/launcher/Cargo.toml -- --print-paths --json --channel beta --namespace release-beta-win
+cargo run --manifest-path apps/launcher/Cargo.toml -- --apply-pending --json --channel beta --namespace release-beta-win
 ```

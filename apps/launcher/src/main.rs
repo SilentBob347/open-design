@@ -1,5 +1,5 @@
 use launcher_core::{LauncherIdentity, LauncherPathLayout, Namespace, ReleaseChannel};
-use launcher_platform::default_data_root;
+use launcher_platform::{apply_pending_state_promotion, default_data_root};
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -9,6 +9,7 @@ const DEFAULT_NAMESPACE: &str = "default";
 
 #[derive(Debug, Eq, PartialEq)]
 enum CommandMode {
+    ApplyPending,
     PrintPaths,
     Version,
 }
@@ -32,16 +33,26 @@ fn main() {
 fn run() -> Result<(), Box<dyn Error>> {
     let options = parse_args(std::env::args().skip(1))?;
     match options.mode {
+        CommandMode::ApplyPending => {
+            let paths = resolve_paths(&options)?;
+            let plan = apply_pending_state_promotion(&paths)?;
+            if options.json {
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+            } else if let Some(current) = &plan.current {
+                if plan.promote {
+                    println!("promoted pending update to {}", current.version);
+                } else {
+                    println!("no pending update; current is {}", current.version);
+                }
+            } else {
+                println!("no pending update and no current payload");
+            }
+        }
         CommandMode::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
         }
         CommandMode::PrintPaths => {
-            let data_root = match options.data_root {
-                Some(path) => path,
-                None => default_data_root()?,
-            };
-            let identity = LauncherIdentity::new(options.channel, options.namespace);
-            let paths = LauncherPathLayout::from_data_root(data_root, &identity);
+            let paths = resolve_paths(&options)?;
             if options.json {
                 println!("{}", serde_json::to_string_pretty(&paths)?);
             } else {
@@ -54,6 +65,15 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+fn resolve_paths(options: &CliOptions) -> Result<LauncherPathLayout, Box<dyn Error>> {
+    let data_root = match &options.data_root {
+        Some(path) => path.clone(),
+        None => default_data_root()?,
+    };
+    let identity = LauncherIdentity::new(options.channel, options.namespace.clone());
+    Ok(LauncherPathLayout::from_data_root(data_root, &identity))
 }
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<CliOptions, Box<dyn Error>> {
@@ -78,6 +98,9 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<CliOptions, Box<
             }
             "--json" => {
                 json = true;
+            }
+            "--apply-pending" => {
+                mode = Some(CommandMode::ApplyPending);
             }
             "--namespace" => {
                 namespace = Namespace::new(take_value(&mut iter, "--namespace")?)?;
@@ -126,6 +149,7 @@ fn print_help() {
     println!(
         "Usage:
   open-design-launcher --version
+  open-design-launcher --apply-pending [--json] [--channel <stable|beta|nightly|preview>] [--namespace <name>] [--data-root <path>]
   open-design-launcher --print-paths [--json] [--channel <stable|beta|nightly|preview>] [--namespace <name>] [--data-root <path>]"
     );
 }

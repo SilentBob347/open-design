@@ -43,6 +43,7 @@ name = "launcher-platform"
 version = "0.1.0"
 dependencies = [
  "launcher-core",
+ "serde_json",
  "thiserror",
 ]
 
