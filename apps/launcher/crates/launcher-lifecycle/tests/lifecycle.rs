@@ -3,7 +3,7 @@ use launcher_lifecycle::{
     RuntimeSelectionSlot, build_process_spec, build_runtime_plan, resolve_config_with_args,
     resolve_launcher_config,
 };
-use launcher_proto::{RuntimeApp, RuntimeMode, RuntimeSource};
+use launcher_proto::RuntimeApp;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -77,8 +77,6 @@ fn write_runtime_config_opts(root: &Path, duplicate_endpoint: bool) {
   "generation": 12,
   "namespace": "release-beta-win",
   "namespaceRoot": "namespaces/release-beta-win",
-  "mode": "packaged",
-  "source": "launcher",
   "active": {{
     "version": "0.8.1",
     "root": "namespaces/release-beta-win/versions/0.8.1",
@@ -298,6 +296,52 @@ fn unknown_fields_fail() {
 }
 
 #[test]
+fn legacy_fields_fail() {
+    let root = temp_root("legacy-runtime-mode-source");
+    let config_root = root.join("config");
+    fs::create_dir_all(&config_root).unwrap();
+    fs::write(
+        config_root.join(LAUNCHER_CONFIG_FILE),
+        r#"{
+  "schemaVersion": 1,
+  "runtimePath": "runtime.json"
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        config_root.join("runtime.json"),
+        r#"{
+  "schemaVersion": 1,
+  "generation": 12,
+  "namespace": "release-beta-win",
+  "namespaceRoot": "namespaces/release-beta-win",
+  "mode": "packaged",
+  "source": "launcher",
+  "active": {
+    "version": "0.8.1",
+    "root": "namespaces/release-beta-win/versions/0.8.1",
+    "entry": {"executable": "payload/Open Design Payload.exe"}
+  },
+  "lastSuccessful": {
+    "version": "0.8.0",
+    "root": "namespaces/release-beta-win/versions/0.8.0",
+    "entry": {"executable": "payload/Open Design Payload.exe"}
+  }
+}"#,
+    )
+    .unwrap();
+    let mut search = search(&root);
+    search.explicit_root = Some(config_root);
+
+    assert!(matches!(
+        resolve_launcher_config(&search),
+        Err(LauncherLifecycleError::Platform(_))
+    ));
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn cwd_defaults_to_payload() {
     let config = launcher_lifecycle::LauncherConfig {
         attempt_path: None,
@@ -326,8 +370,6 @@ fn runtime_plan_resolves_active() {
     let plan = build_runtime_plan(&resolved).unwrap();
 
     assert_eq!(plan.namespace.as_str(), "release-beta-win");
-    assert_eq!(plan.mode, RuntimeMode::Packaged);
-    assert_eq!(plan.source, RuntimeSource::Launcher);
     assert_eq!(plan.generation, 12);
     assert_eq!(plan.selected_slot, RuntimeSelectionSlot::Active);
     assert_eq!(plan.selected_version, "0.8.1");

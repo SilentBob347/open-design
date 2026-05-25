@@ -25,7 +25,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the native
 - Keep the launcher payload-agnostic. A payload is described by a manifest and an entry command; the launcher must not special-case Electron, daemon, web, or Open Design business protocols.
 - Keep platform-specific OS primitives in `crates/launcher-platform`.
 - Keep cross-platform launcher business flow in `crates/launcher-lifecycle`.
-- Keep protocol-shaped app/mode/source/namespace/endpoint/stamp primitives in `crates/launcher-proto`; this crate is hand-written Rust and does not import TypeScript packages.
+- Keep protocol-shaped app/namespace/endpoint/stamp primitives in `crates/launcher-proto`; this crate is hand-written Rust and does not import TypeScript packages.
 - Keep launcher-local resource/update DTOs in `crates/launcher-core`.
 - `launcher.json` lookup order is `--root <dir>` > `OD_LAUNCHER_ROOT` > current working directory > launcher executable directory. Explicit root/env misses must fail instead of falling back.
 - Prefer `launcher.json` + external `runtime.json` for new activation flows. Legacy `payloadRoot` + `entry` is only a transitional cold-start path.

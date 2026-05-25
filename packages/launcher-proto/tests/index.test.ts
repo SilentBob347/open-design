@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   RUNTIME_APPS,
-  RUNTIME_MODES,
-  RUNTIME_SOURCES,
   buildAttempt,
   buildLauncherConfig,
   buildRuntimeConfig,
@@ -12,7 +10,7 @@ import {
   normalizeNamespace,
 } from "../src/index.js";
 
-function devRuntime() {
+function packagedRuntime() {
   return buildRuntimeConfig({
     active: {
       apps: {
@@ -21,37 +19,33 @@ function devRuntime() {
           entry: {
             args: ["--serve"],
             env: { OD_PORT: "17456" },
-            executable: "apps/daemon/src/sidecar/index.ts",
+            executable: "payload/daemon.exe",
           },
         },
         web: {
           endpoint: "tcp://127.0.0.1:17402",
           entry: {
             env: { OD_WEB_PORT: "17573" },
-            executable: "apps/web/sidecar/index.ts",
+            executable: "payload/web.exe",
           },
         },
       },
       entry: {
-        args: ["--workspace"],
-        executable: "apps/desktop/dist/main/index.js",
+        executable: "payload/Open Design Payload.exe",
       },
-      root: "C:/repo/open-design",
-      version: "dev-workspace",
+      root: "namespaces/release-beta-win/versions/0.8.1",
+      version: "0.8.1",
     },
     generation: 1,
     lastSuccessful: {
       entry: {
-        args: ["--workspace"],
-        executable: "apps/desktop/dist/main/index.js",
+        executable: "payload/Open Design Payload.exe",
       },
-      root: "C:/repo/open-design",
-      version: "dev-workspace",
+      root: "namespaces/release-beta-win/versions/0.8.0",
+      version: "0.8.0",
     },
-    mode: RUNTIME_MODES.DEV,
-    namespace: "dev-local",
-    namespaceRoot: ".tmp/tools-dev/dev-local",
-    source: RUNTIME_SOURCES.TOOLS_DEV,
+    namespace: "release-beta-win",
+    namespaceRoot: "namespaces/release-beta-win",
   });
 }
 
@@ -69,15 +63,17 @@ describe("launcher proto", () => {
   });
 
   it("builds runtime config", () => {
-    const runtime = devRuntime();
+    const runtime = packagedRuntime();
 
     expect(runtime.schemaVersion).toBe(1);
-    expect(runtime.active.version).toBe("dev-workspace");
+    expect(runtime.active.version).toBe("0.8.1");
     expect(runtime.active.apps.daemon?.endpoint).toBe("tcp://127.0.0.1:17401");
     expect(runtime.active.apps.web?.entry.env).toEqual({ OD_WEB_PORT: "17573" });
     expect(runtime.lastSuccessful.apps).toEqual({});
     expect(JSON.stringify(runtime)).toContain("\"endpoint\"");
     expect(JSON.stringify(runtime)).not.toContain("\"ipc\"");
+    expect(JSON.stringify(runtime)).not.toContain("\"mode\"");
+    expect(JSON.stringify(runtime)).not.toContain("\"source\"");
   });
 
   it("normalizes endpoint", () => {
@@ -96,24 +92,12 @@ describe("launcher proto", () => {
     expect(() => normalizeNamespace("-beta")).toThrow();
   });
 
-  it("rejects unknown enums", () => {
+  it("rejects unknown app descriptors", () => {
     expect(() =>
       buildRuntimeConfig({
-        ...devRuntime(),
-        mode: "runtime",
-      }),
-    ).toThrow(/mode/);
-    expect(() =>
-      buildRuntimeConfig({
-        ...devRuntime(),
-        source: "packaged",
-      }),
-    ).toThrow(/source/);
-    expect(() =>
-      buildRuntimeConfig({
-        ...devRuntime(),
+        ...packagedRuntime(),
         active: {
-          ...devRuntime().active,
+          ...packagedRuntime().active,
           apps: {
             api: {
               endpoint: createEndpoint(17404),

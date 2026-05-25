@@ -13,21 +13,6 @@ export const RUNTIME_APPS = Object.freeze({
 
 export type RuntimeApp = (typeof RUNTIME_APPS)[keyof typeof RUNTIME_APPS];
 
-export const RUNTIME_MODES = Object.freeze({
-  DEV: "dev",
-  PACKAGED: "packaged",
-} as const);
-
-export type RuntimeMode = (typeof RUNTIME_MODES)[keyof typeof RUNTIME_MODES];
-
-export const RUNTIME_SOURCES = Object.freeze({
-  LAUNCHER: "launcher",
-  TOOLS_DEV: "tools-dev",
-  TOOLS_PACK: "tools-pack",
-} as const);
-
-export type RuntimeSource = (typeof RUNTIME_SOURCES)[keyof typeof RUNTIME_SOURCES];
-
 declare const endpointBrand: unique symbol;
 declare const namespaceBrand: unique symbol;
 
@@ -65,11 +50,9 @@ export type RuntimeConfig = {
   active: RuntimeVersionDescriptor;
   generation: number;
   lastSuccessful: RuntimeVersionDescriptor;
-  mode: RuntimeMode;
   namespace: RuntimeNamespace;
   namespaceRoot: string;
   schemaVersion: typeof RUNTIME_CONFIG_SCHEMA_VERSION;
-  source: RuntimeSource;
 };
 
 export type RuntimeAttempt = {
@@ -110,10 +93,8 @@ export type RuntimeConfigInput = {
   active: RuntimeVersionInput;
   generation: number;
   lastSuccessful: RuntimeVersionInput;
-  mode: RuntimeMode | string;
   namespace: RuntimeNamespace | string;
   namespaceRoot: string;
-  source: RuntimeSource | string;
 };
 
 export type LauncherConfigInput = {
@@ -140,11 +121,9 @@ export function buildRuntimeConfig(input: RuntimeConfigInput): RuntimeConfig {
     active: buildRuntimeVersion(input.active, "active"),
     generation: normalizeGeneration(input.generation),
     lastSuccessful: buildRuntimeVersion(input.lastSuccessful, "lastSuccessful"),
-    mode: normalizeMode(input.mode),
     namespace: normalizeNamespace(input.namespace),
     namespaceRoot: nonEmptyString(input.namespaceRoot, "namespaceRoot"),
     schemaVersion: RUNTIME_CONFIG_SCHEMA_VERSION,
-    source: normalizeSource(input.source),
   };
 }
 
@@ -212,16 +191,6 @@ export function normalizeNamespace(value: unknown): RuntimeNamespace {
 export function normalizeApp(value: unknown): RuntimeApp {
   if (value === RUNTIME_APPS.DAEMON || value === RUNTIME_APPS.DESKTOP || value === RUNTIME_APPS.WEB) return value;
   throw protoError(`unsupported runtime app: ${String(value)}`);
-}
-
-export function normalizeMode(value: unknown): RuntimeMode {
-  if (value === RUNTIME_MODES.DEV || value === RUNTIME_MODES.PACKAGED) return value;
-  throw protoError(`unsupported runtime mode: ${String(value)}`);
-}
-
-export function normalizeSource(value: unknown): RuntimeSource {
-  if (value === RUNTIME_SOURCES.LAUNCHER || value === RUNTIME_SOURCES.TOOLS_DEV || value === RUNTIME_SOURCES.TOOLS_PACK) return value;
-  throw protoError(`unsupported runtime source: ${String(value)}`);
 }
 
 function normalizeEntry(input: LauncherEntryInput, label: string): LauncherEntry {

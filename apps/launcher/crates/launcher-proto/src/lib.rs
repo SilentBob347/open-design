@@ -45,38 +45,6 @@ impl fmt::Display for RuntimeApp {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RuntimeMode {
-    Dev,
-    Packaged,
-}
-
-impl RuntimeMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Dev => "dev",
-            Self::Packaged => "packaged",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RuntimeSource {
-    Launcher,
-    ToolsDev,
-}
-
-impl RuntimeSource {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Launcher => "launcher",
-            Self::ToolsDev => "tools-dev",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct RuntimeNamespace(String);
@@ -198,25 +166,15 @@ impl<'de> Deserialize<'de> for RuntimeEndpoint {
 pub struct RuntimeStamp {
     pub app: RuntimeApp,
     pub endpoint: RuntimeEndpoint,
-    pub mode: RuntimeMode,
     pub namespace: RuntimeNamespace,
-    pub source: RuntimeSource,
 }
 
 impl RuntimeStamp {
-    pub fn new(
-        app: RuntimeApp,
-        endpoint: RuntimeEndpoint,
-        mode: RuntimeMode,
-        namespace: RuntimeNamespace,
-        source: RuntimeSource,
-    ) -> Self {
+    pub fn new(app: RuntimeApp, endpoint: RuntimeEndpoint, namespace: RuntimeNamespace) -> Self {
         Self {
             app,
             endpoint,
-            mode,
             namespace,
-            source,
         }
     }
 }

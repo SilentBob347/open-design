@@ -5,9 +5,7 @@ use crate::{
 };
 use launcher_core::PayloadEntry;
 use launcher_platform::ProcessSpec;
-use launcher_proto::{
-    RuntimeApp, RuntimeEndpoint, RuntimeMode, RuntimeNamespace, RuntimeSource, RuntimeStamp,
-};
+use launcher_proto::{RuntimeApp, RuntimeEndpoint, RuntimeNamespace, RuntimeStamp};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -20,11 +18,9 @@ pub struct RuntimeConfig {
     pub active: RuntimeVersionDescriptor,
     pub generation: u64,
     pub last_successful: RuntimeVersionDescriptor,
-    pub mode: RuntimeMode,
     pub namespace: RuntimeNamespace,
     pub namespace_root: String,
     pub schema_version: u32,
-    pub source: RuntimeSource,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -121,7 +117,6 @@ pub struct RuntimePlan {
     pub cache_root: PathBuf,
     pub generation: u64,
     pub logs_root: PathBuf,
-    pub mode: RuntimeMode,
     pub namespace: RuntimeNamespace,
     pub namespace_root: PathBuf,
     pub runtime_root: PathBuf,
@@ -129,7 +124,6 @@ pub struct RuntimePlan {
     pub selected_root: PathBuf,
     pub selected_slot: RuntimeSelectionSlot,
     pub selected_version: String,
-    pub source: RuntimeSource,
     pub state_root: PathBuf,
     pub versions_root: PathBuf,
 }
@@ -182,9 +176,7 @@ pub fn build_runtime_plan(
         let stamp = RuntimeStamp::new(
             app,
             app_descriptor.endpoint.clone(),
-            runtime.config.mode,
             runtime.config.namespace.clone(),
-            runtime.config.source,
         );
         apps.push(RuntimeAppPlan {
             app,
@@ -201,7 +193,6 @@ pub fn build_runtime_plan(
         cache_root: namespace_root.join("cache"),
         generation: runtime.config.generation,
         logs_root,
-        mode: runtime.config.mode,
         namespace: runtime.config.namespace.clone(),
         namespace_root: namespace_root.clone(),
         runtime_root,
@@ -209,7 +200,6 @@ pub fn build_runtime_plan(
         selected_root: runtime.selected_root.clone(),
         selected_slot: runtime.selected_slot,
         selected_version: runtime.selected_version.version.clone(),
-        source: runtime.config.source,
         state_root: namespace_root.join("state"),
         versions_root: namespace_root.join("versions"),
     })
