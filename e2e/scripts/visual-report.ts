@@ -177,8 +177,10 @@ export async function compareCase(input: {
   const writeDiffPngOp = ops.writeDiffPng ?? writeDiffPng;
   const prKey = prImageKey(prNumber, runId, 'pr', visualCase.name);
 
+  const visualBuffer = await readFile(visualCase.path);
+
   try {
-    await validatePngFile(visualCase.path);
+    validatePngBuffer(visualBuffer, visualCase.path);
   } catch (error) {
     return {
       name: visualCase.name,
@@ -453,8 +455,7 @@ function setPixel(png: PNG, x: number, y: number, color: readonly [number, numbe
   png.data[index + 3] = color[3];
 }
 
-async function validatePngFile(filePath: string): Promise<void> {
-  const buffer = await readFile(filePath);
+function validatePngBuffer(buffer: Buffer, filePath: string): void {
   assertPngHeaderSize(buffer, filePath);
   const png = PNG.sync.read(buffer);
   assertPngSize(png, filePath);

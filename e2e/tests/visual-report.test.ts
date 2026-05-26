@@ -129,6 +129,44 @@ describe('visual report PNG sizing', () => {
     }
   });
 
+  test('missing screenshot files propagate instead of returning a failed case', async () => {
+    const workDir = await mkdtemp(path.join(tmpdir(), 'visual-report-'));
+    try {
+      const outputDir = path.join(workDir, 'output');
+      const missingPath = path.join(workDir, 'visual-missing.png');
+
+      const r2 = {
+        bucket: 'visual-bucket',
+        publicOrigin: 'https://example.invalid',
+        client: {} as never,
+      };
+
+      await expect(compareCase(
+        {
+          r2,
+          prNumber: '12',
+          runId: '34',
+          headSha: 'b'.repeat(40),
+          visualCase: { name: 'visual-missing', path: missingPath },
+          candidateShas: ['c'.repeat(40)],
+          outputDir,
+        },
+        {
+          putFile: async () => {},
+          findBaseline: async () => null,
+          downloadObject: async () => {
+            throw new Error('download should not run');
+          },
+          writeDiffPng: async () => {
+            throw new Error('diff should not run');
+          },
+        },
+      )).rejects.toThrow(/ENOENT|no such file/i);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
   test('malformed screenshots without a baseline fail before any PR upload', async () => {
     const workDir = await mkdtemp(path.join(tmpdir(), 'visual-report-'));
     try {

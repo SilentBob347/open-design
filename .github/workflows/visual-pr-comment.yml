@@ -147,8 +147,9 @@ jobs:
               echo "Unable to resolve trusted workflow_run head owner from $source_head_repository." >&2
               exit 1
             fi
+            encoded_head="$(jq -rn --arg head "$head_owner:$source_head_branch" '$head|@uri')"
             matching_pr_numbers="$(
-              gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$head_owner:$source_head_branch&per_page=100" \
+              gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$encoded_head&per_page=100" \
                 | jq -r --arg sha "$source_head_sha" --arg repo "$source_head_repository" \
                     '.[] | select(.head.sha == $sha and (.head.repo.full_name // "") == $repo) | .number' \
                 | paste -sd ' ' -
