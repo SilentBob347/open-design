@@ -150,8 +150,8 @@ jobs:
             encoded_head="$(jq -rn --arg head "$head_owner:$source_head_branch" '$head|@uri')"
             matching_pr_numbers="$(
               gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$encoded_head&per_page=100" \
-                | jq -r --arg sha "$source_head_sha" --arg repo "$source_head_repository" \
-                    '.[] | select(.head.sha == $sha and (.head.repo.full_name // "") == $repo) | .number' \
+                | jq -r --arg repo "$source_head_repository" \
+                    '.[] | select((.head.repo.full_name // "") == $repo) | .number' \
                 | paste -sd ' ' -
             )"
             match_count="$(wc -w <<< "$matching_pr_numbers" | tr -d ' ')"
