@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
+import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
@@ -116,6 +116,11 @@ import {
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
+
+function resolveChromeActionsHost(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`.workspace-tabs-chrome ${APP_CHROME_FILE_ACTIONS_SELECTOR}`)
+    ?? document.getElementById(APP_CHROME_FILE_ACTIONS_ID);
+}
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
@@ -754,7 +759,7 @@ export function LiveArtifactViewer({
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+    setChromeActionsHost(resolveChromeActionsHost());
   }, []);
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -1145,26 +1150,27 @@ export function LiveArtifactViewer({
             action={t('liveArtifact.refresh.failureAction')}
           />
         ) : null}
-        {mode === 'preview' ? (
-          <div
-            className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          >
-            <div className="preview-frame-clip">
-              <div style={previewScaleShellStyle(previewViewport, previewScale)}>
-                <PreviewDrawOverlay>
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="live-artifact-preview-frame"
-                    title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups allow-downloads"
-                    src={previewUrl}
-                  />
-                </PreviewDrawOverlay>
-              </div>
+        <div
+          className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+          data-active={mode === 'preview' ? 'true' : 'false'}
+          aria-hidden={mode === 'preview' ? undefined : true}
+          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+        >
+          <div className="preview-frame-clip">
+            <div style={previewScaleShellStyle(previewViewport, previewScale)}>
+              <PreviewDrawOverlay>
+                <iframe
+                  ref={iframeRef}
+                  data-testid="live-artifact-preview-frame"
+                  title={liveArtifact.title}
+                  sandbox="allow-scripts allow-popups allow-downloads"
+                  src={previewUrl}
+                />
+              </PreviewDrawOverlay>
             </div>
           </div>
-        ) : loading ? (
+        </div>
+        {mode !== 'preview' && loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'code' ? (
           <LiveArtifactCodePanel
@@ -4172,7 +4178,7 @@ function HtmlViewer({
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+    setChromeActionsHost(resolveChromeActionsHost());
   }, []);
 
   useEffect(() => {

@@ -12,6 +12,7 @@ interface Props {
 }
 
 export const APP_CHROME_FILE_ACTIONS_ID = 'app-chrome-file-actions';
+export const APP_CHROME_FILE_ACTIONS_SELECTOR = '[data-app-chrome-file-actions="true"]';
 
 export function AppChromeHeader({
   actions,
@@ -41,7 +42,11 @@ export function AppChromeHeader({
       {children ? <div className="app-chrome-content">{children}</div> : null}
       <div className="app-chrome-drag" aria-hidden />
       {fileActionsBefore ? <div className="app-chrome-file-actions-before">{fileActionsBefore}</div> : null}
-      <div id={APP_CHROME_FILE_ACTIONS_ID} className="app-chrome-file-actions" />
+      <div
+        id={APP_CHROME_FILE_ACTIONS_ID}
+        className="app-chrome-file-actions"
+        data-app-chrome-file-actions="true"
+      />
       {actions ? <div className="app-chrome-actions">{actions}</div> : null}
     </header>
   );

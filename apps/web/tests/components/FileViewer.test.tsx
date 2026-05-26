@@ -2849,6 +2849,47 @@ describe('LiveArtifactViewer', () => {
     });
   });
 
+  it('preserves the live preview iframe when switching away from preview and back', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    await screen.findByRole('link', { name: /^open$/i });
+
+    const previewFrame = container.querySelector('[data-testid="live-artifact-preview-frame"]');
+    expect(previewFrame).toBeTruthy();
+    expect(container.querySelector('.live-artifact-preview-layer')?.getAttribute('data-active')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /code/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.live-artifact-preview-layer')?.getAttribute('data-active')).toBe('false');
+    });
+    expect(container.querySelector('[data-testid="live-artifact-preview-frame"]')).toBe(previewFrame);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.live-artifact-preview-layer')?.getAttribute('data-active')).toBe('true');
+    });
+    expect(container.querySelector('[data-testid="live-artifact-preview-frame"]')).toBe(previewFrame);
+  });
+
   it('closes the present menu on Escape without tearing down the viewer', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);

@@ -647,6 +647,7 @@ export function ProjectView({
     active: null,
   });
   const tabsLoadedRef = useRef(false);
+  const tabsHydratedFromSavedStateRef = useRef(false);
   const hasAppliedInitialPrimaryOpenRef = useRef(false);
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
   // tool card, an attachment chip, or a produced-file chip in chat. We
@@ -1022,10 +1023,12 @@ export function ProjectView({
   useEffect(() => {
     let cancelled = false;
     tabsLoadedRef.current = false;
+    tabsHydratedFromSavedStateRef.current = false;
     hasAppliedInitialPrimaryOpenRef.current = false;
     (async () => {
       const state = await loadTabs(project.id);
       if (cancelled) return;
+      tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
       setOpenTabsState(state);
       tabsLoadedRef.current = true;
     })();
@@ -1097,6 +1100,10 @@ export function ProjectView({
     if (hasAppliedInitialPrimaryOpenRef.current) return;
     if (routeFileName) return;
     if (openTabsState.active || openTabsState.tabs.length > 0) {
+      hasAppliedInitialPrimaryOpenRef.current = true;
+      return;
+    }
+    if (tabsHydratedFromSavedStateRef.current) {
       hasAppliedInitialPrimaryOpenRef.current = true;
       return;
     }

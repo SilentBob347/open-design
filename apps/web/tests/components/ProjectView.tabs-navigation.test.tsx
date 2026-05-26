@@ -306,4 +306,33 @@ describe('ProjectView tab URL hydration', () => {
     });
     expect(mockedSaveTabs).toHaveBeenCalledTimes(2);
   });
+
+  it('does not auto-open the primary file when saved tabs were explicitly empty', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: [], active: null, hasSavedState: true });
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        type: 'file',
+        size: 1,
+        mtime: 1,
+        mime: 'text/html',
+        kind: 'html',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: 'Index',
+          entry: 'index.html',
+          renderer: 'html',
+          primary: true,
+          exports: ['html'],
+        },
+      },
+    ]);
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
+    expect(mockedSaveTabs).not.toHaveBeenCalled();
+  });
 });
