@@ -278,34 +278,49 @@ pnpm tools-dev start
 
 <br/>
 
-## ⚡ 全自动化贡献体系
+## ⚡ Welcome to Contributing — 全自动化开源协作
 
-**Open Design 是全球首个全自动化开源贡献社区——从 Issue 提交到 PR 合入，分钟级响应。**
+> **在大多数开源项目里，你的 PR 可能等几周才被看一眼。在 Open Design，从你提交 Issue 到代码合入 main，整个流程以分钟计。**
+
+我们用 Agent 驱动了整条贡献者管线——不是象征性的 bot 回复，而是真正的自动分类、自动实现、自动 Review、自动合入：
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────┐
-│  你提交 Issue │ ──▶ │ Bot 分钟级自动响应  │ ──▶ │ Agent 生成修复 PR │ ──▶ │ 自动 Review &  │
-│  或 PR       │     │ 分类 + 分配       │     │ 或实现方案       │     │ 合入          │
-└─────────────┘     └──────────────────┘     └─────────────────┘     └──────────────┘
+  Issue / PR 提交
+       │
+       ▼
+  ┌─────────────────────────────────┐
+  │  Agent 自动分类 · 分钟级响应      │
+  │  ─────────────────────────────  │
+  │  生成修复方案 / 代码实现          │
+  │  ─────────────────────────────  │
+  │  自动 Review · 合入 main         │
+  └─────────────────────────────────┘
+       │
+       ▼
+  你成为 50K+ star 项目的 Contributor
 ```
 
-### 为什么来 Open Design 贡献？
+### 这意味着什么？
 
-- ⚡ **分钟级 Issue 响应** — 不会石沉大海，每一条有价值的反馈都会被处理
-- ✅ **PR 保证被合入** — 只要符合标准，你的代码一定会出现在 main 分支
-- 🏆 **成为顶级开源项目的 Contributor** — 50K+ star 项目的贡献者身份，写在你的 GitHub Profile 上
-- 🚀 **极低门槛** — [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 标签随时等你，从 Plugin、Design System 到文档翻译都算贡献
+| 传统开源项目 | Open Design |
+|---|---|
+| Issue 石沉大海，数周无人问津 | **分钟级 Agent 响应**，每条有价值的反馈都会被处理 |
+| PR 排队等 maintainer 有空 | **符合标准即自动合入**，你的代码一定会出现在 main |
+| 贡献门槛高，需要深度了解架构 | **Plugin / Design System / 文档翻译**都算贡献，[`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 随时等你 |
+| 贡献后无人知晓 | **50K+ star 项目 Contributor 身份**，写在你的 GitHub Profile |
 
-### 🌍 Fellow 计划（全球大使）
+### 🌍 Fellow 计划 — 成为全球大使
 
-成为 Open Design Fellow，你将获得：
+我们正在招募全球各地的 Open Design Fellow。这不是一个象征性的称号——
 
-- 🎖️ **官网展示** — 你的名字和头像出现在 [open-design.ai](https://open-design.ai/) 官网
-- 💰 **每年 $1,000 免费 MR 额度** — 可使用任何模型（Claude / GPT / Gemini / DeepSeek…）
-- 📣 **官方授权推广** — 以 Open Design 全球大使身份在你的社区传播
-- 🤝 **核心团队直接对接** — 优先获得产品方向反馈和技术支持
+| 权益 | 详情 |
+|---|---|
+| 🖼️ **官网永久展示** | 你的名字、头像和贡献故事出现在 [open-design.ai](https://open-design.ai/) |
+| 💎 **$1,000 / 年 MR 免费额度** | Claude · GPT · Gemini · DeepSeek——任何模型随意用 |
+| 📣 **官方授权** | 以 Open Design 全球大使身份在你的社区推广和布道 |
+| 🔗 **核心团队直连** | 产品方向优先反馈、技术问题优先支持、路线图参与权 |
 
-> 申请条件：持续贡献代码/Plugin/Design System，或在你的社区积极推广 Open Design。详情即将在官网发布。
+> **申请方式**：持续贡献代码 / Plugin / Design System，或在你的社区积极推广 Open Design。Fellow 计划详情即将在官网正式发布。
 
 <br/>
 
