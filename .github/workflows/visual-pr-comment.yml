@@ -155,11 +155,15 @@ jobs:
                 | paste -sd ' ' -
             )"
             match_count="$(wc -w <<< "$matching_pr_numbers" | tr -d ' ')"
-            if [ "$match_count" -ne 1 ]; then
+            if [ "$match_count" -gt 1 ]; then
               echo "Unable to resolve a unique open PR from trusted workflow metadata for $source_head_repository@$source_head_branch ($source_head_sha); found $match_count matches." >&2
               exit 1
             fi
-            pr_number="$matching_pr_numbers"
+            if [ "$match_count" -eq 1 ]; then
+              pr_number="$matching_pr_numbers"
+            else
+              pr_number="$manifest_pr_number"
+            fi
           fi
           if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
             echo "Unable to derive PR number from trusted workflow metadata for workflow head $source_head_sha." >&2

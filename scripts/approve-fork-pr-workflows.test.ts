@@ -25,8 +25,9 @@ test("visual-pr-comment resolves empty workflow_run.pull_requests from trusted r
   assert.match(manifestStep, /jq -r --arg repo "\$source_head_repository"/u);
   assert.doesNotMatch(manifestStep, /select\(\.head\.sha == \$sha/u);
   assert.match(manifestStep, /match_count=.*wc -w/u);
+  assert.match(manifestStep, /if \[ "\$match_count" -gt 1 \]; then/u);
   assert.match(manifestStep, /found \$match_count matches/);
-  assert.doesNotMatch(manifestStep, /pr_number="\$manifest_pr_number"/);
+  assert.match(manifestStep, /pr_number="\$manifest_pr_number"/u);
   assert.match(trustedPrStep, /Skipping stale visual artifact for \$ARTIFACT_HEAD_SHA; current PR head is \$current_head\./u);
 });
 
