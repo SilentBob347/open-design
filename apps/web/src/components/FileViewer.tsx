@@ -63,6 +63,8 @@ import {
   exportReactComponentAsZip,
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
+  requestPreviewSnapshotResult,
+  type PreviewSnapshotResult,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -541,6 +543,74 @@ function manualEditPreviewShellStyle(
     };
   }
   return previewScaleShellStyle(viewport, previewScale);
+}
+
+async function previewSnapshotDataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
+async function previewSnapshotBlobFromIframes(
+  iframes: Array<HTMLIFrameElement | null>,
+): Promise<{ blob: Blob; fallback?: PreviewSnapshotResult }> {
+  let fallback: PreviewSnapshotResult | undefined;
+  for (const iframe of iframes) {
+    if (!iframe) {
+      fallback ??= { ok: false, reason: 'loading' };
+      continue;
+    }
+    const result = await requestPreviewSnapshotResult(iframe);
+    if (result.ok) {
+      return { blob: await previewSnapshotDataUrlToBlob(result.snapshot.dataUrl), fallback };
+    }
+    fallback ??= result;
+  }
+  throw new Error(snapshotFailureMessage(fallback));
+}
+
+function snapshotFailureMessage(result: PreviewSnapshotResult | undefined): string {
+  if (!result) return '无法截取预览，请重试';
+  if (!result.ok && result.reason === 'loading') return '预览还在加载，请稍后再试';
+  return '无法截取预览，请重试';
+}
+
+function clipboardFailureMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err || '');
+  if (/clipboard|notallowed|permission|denied|write/i.test(message)) {
+    return '浏览器拒绝写入剪贴板';
+  }
+  if (message === '预览还在加载，请稍后再试') return message;
+  return message || '无法截取预览，请重试';
+}
+
+function manualEditFloatingPanelStyle(
+  target: ManualEditTarget,
+  previewScale: number,
+  canvasSize: PreviewCanvasSize | undefined,
+): CSSProperties {
+  const scale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
+  const panelWidth = 320;
+  const panelHeight = target.kind === 'text' || target.kind === 'link' ? 280 : 520;
+  const pad = 12;
+  const canvasWidth = canvasSize?.width ?? 1200;
+  const canvasHeight = canvasSize?.height ?? 800;
+  const targetLeft = target.rect.x * scale;
+  const targetTop = target.rect.y * scale;
+  const targetRight = (target.rect.x + target.rect.width) * scale;
+  let left = targetRight + pad;
+  if (left + panelWidth > canvasWidth - pad) {
+    left = Math.max(pad, targetLeft - panelWidth - pad);
+  }
+  const top = Math.max(
+    pad,
+    Math.min(targetTop, Math.max(pad, canvasHeight - panelHeight - pad)),
+  );
+  return {
+    left,
+    top,
+    width: panelWidth,
+    maxHeight: `min(${panelHeight}px, calc(100% - ${pad * 2}px))`,
+  };
 }
 
 export function cancelManualEditPendingStyleSnapshot(
@@ -1911,7 +1981,18 @@ function formatCommentTime(ts: number, t: TranslateFn): string {
 
 function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
   if (comment.elementId.startsWith('pin-')) return t('chat.comments.pin');
-  return commentTargetDisplayName(comment);
+  const label = String(comment.label || '').trim().toLowerCase();
+  const htmlHint = String(comment.htmlHint || '').trim().toLowerCase();
+  const elementId = String(comment.elementId || '').trim().toLowerCase();
+  const source = `${label} ${htmlHint} ${elementId}`;
+  if (/\b(?:img|picture|video|canvas|svg)\b/.test(source)) return 'Image';
+  if (/\b(?:button|input|textarea|select|label)\b/.test(source)) return 'Control';
+  if (/\b(?:a)\b/.test(label) || /^<a\b/.test(htmlHint)) return 'Link';
+  if (/\b(?:h1|h2|h3|h4|h5|h6|p|span|strong|em|small|li|dt|dd)\b/.test(source)) return 'Text';
+  if (/\b(?:section|main|header|footer|nav|article|aside)\b/.test(source)) return 'Section';
+  if (label.endsWith('.html') || elementId.startsWith('file-comment-')) return 'Page';
+  if (comment.text.trim()) return 'Text';
+  return 'Area';
 }
 
 export function CommentSidePanel({
@@ -2054,42 +2135,60 @@ export function CommentSidePanel({
       {composer ? <div className="comment-side-composer">{composer}</div> : null}
       {onCreateComment ? (
         <form
-          className="comment-side-new-comment"
+          className="comment-side-new-comment composer"
           onSubmit={(event) => {
             event.preventDefault();
             void submitNewComment();
           }}
         >
-          <textarea
-            value={newCommentDraft}
-            placeholder={t('chat.comments.placeholder')}
-            aria-label={t('chat.comments.placeholder')}
-            onChange={(event) => setNewCommentDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                event.preventDefault();
-                void submitNewComment();
-              }
-            }}
-          />
-          <div className="comment-side-new-comment-actions">
-            <button
-              type="button"
-              className="comment-side-attach"
-              title={t('chat.attachTitle')}
-              aria-label={t('chat.attachAria')}
-              disabled
-            >
-              <Icon name="attach" size={14} />
-            </button>
-            <button
-              type="submit"
-              className="comment-side-new-comment-send"
-              disabled={!canCreateComment}
-            >
-              <Icon name="arrow-up" size={13} />
-              <span>{sending ? t('chat.comments.sending') : t('chat.send')}</span>
-            </button>
+          <div className="composer-shell comment-side-new-comment-shell">
+            <div className="composer-input-wrap">
+              <div className="composer-textarea-layer">
+                <textarea
+                  value={newCommentDraft}
+                  placeholder={t('chat.comments.placeholder')}
+                  aria-label={t('chat.comments.placeholder')}
+                  onChange={(event) => setNewCommentDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault();
+                      void submitNewComment();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="composer-row comment-side-new-comment-actions">
+              <button
+                type="button"
+                className="icon-btn"
+                title={t('chat.cliSettingsTitle')}
+                aria-label={t('chat.cliSettingsAria')}
+                disabled
+              >
+                <span className="composer-tools-at" aria-hidden>
+                  @
+                </span>
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                title={t('chat.attachTitle')}
+                aria-label={t('chat.attachAria')}
+                disabled
+              >
+                <Icon name="attach" size={15} />
+              </button>
+              <span className="composer-spacer" />
+              <button
+                type="submit"
+                className={`composer-send${sending ? ' is-sending' : ''}`}
+                disabled={!canCreateComment}
+              >
+                <Icon name="send" size={13} />
+                <span>{sending ? t('chat.comments.sending') : t('chat.send')}</span>
+              </button>
+            </div>
           </div>
         </form>
       ) : null}
@@ -3476,6 +3575,9 @@ function ReactComponentViewer({
                 </button>
                 {shareMenuOpen ? (
                   <div className="share-menu-popover" role="menu">
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('common.share')}
+                    </div>
                     <button
                       type="button"
                       className="share-menu-item"
@@ -3835,7 +3937,8 @@ function HtmlViewer({
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
   const [drawOverlayIntent, setDrawOverlayIntent] = useState<'draw' | 'screenshot'>('draw');
-  const [screenshotToast, setScreenshotToast] = useState(false);
+  const [screenshotCaptureActive, setScreenshotCaptureActive] = useState(false);
+  const [screenshotToast, setScreenshotToast] = useState<string | null>(null);
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
@@ -4291,7 +4394,7 @@ function HtmlViewer({
     editMode: manualEditMode,
     urlModeBridge,
     inspectMode,
-    drawMode: drawOverlayOpen,
+    drawMode: drawOverlayOpen || screenshotCaptureActive,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
   });
@@ -4909,6 +5012,12 @@ function HtmlViewer({
       }
       if (data.type === 'od-edit-select') {
         void selectManualEditTarget(data.target);
+        return;
+      }
+      if (data.type === 'od-edit-hover') {
+        if (data.target.id !== selectedManualEditTargetIdRef.current) {
+          void selectManualEditTarget(data.target);
+        }
         return;
       }
       if (data.type === 'od-edit-text-commit') {
@@ -5737,7 +5846,7 @@ function HtmlViewer({
 
   function activateScreenshotTool() {
     fireArtifactToolbarClick('draw');
-    const activateScreenshot = () => {
+    const activateScreenshot = async () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
       setBoardMode(false);
@@ -5745,17 +5854,43 @@ function HtmlViewer({
       setInspectMode(false);
       setDrawOverlayIntent('screenshot');
       setMode('preview');
-      setDrawOverlayOpen(true);
-      setScreenshotToast(false);
+      setScreenshotToast('正在复制截图…');
+      setDrawOverlayOpen(false);
       closeArtifactToolMenus();
+      setScreenshotCaptureActive(true);
+      try {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        const srcDocIframe = srcDocPreviewIframeRef.current;
+        if (srcDocIframe) {
+          activateLoadedSrcDocTransport(srcDocIframe) || activateSrcDocTransport(srcDocIframe);
+        }
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+          setScreenshotToast('浏览器拒绝写入剪贴板');
+          return;
+        }
+        const activeIframe = iframeRef.current;
+        const { blob } = await previewSnapshotBlobFromIframes([
+          srcDocIframe,
+          activeIframe === srcDocIframe ? null : activeIframe,
+        ]);
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob }),
+        ]);
+        setScreenshotToast('截图已保存到剪贴板');
+      } catch (err) {
+        console.warn('[screenshot] failed to copy preview snapshot:', err);
+        setScreenshotToast(clipboardFailureMessage(err));
+      } finally {
+        setScreenshotCaptureActive(false);
+      }
     };
     if (manualEditMode) {
       void exitManualEditModeAfterFlush().then((ok) => {
-        if (ok) activateScreenshot();
+        if (ok) void activateScreenshot();
       });
       return;
     }
-    activateScreenshot();
+    void activateScreenshot();
   }
 
   function activateCommentTool() {
@@ -5923,7 +6058,7 @@ function HtmlViewer({
 
   useEffect(() => {
     if (!screenshotToast) return;
-    const id = window.setTimeout(() => setScreenshotToast(false), 2200);
+    const id = window.setTimeout(() => setScreenshotToast(null), 2200);
     return () => window.clearTimeout(id);
   }, [screenshotToast]);
 
@@ -6049,7 +6184,9 @@ function HtmlViewer({
   const copyDeployMenuLabel = (providerLabel: string, url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
-      : `${t('fileViewer.copyDeployLink')} · ${providerLabel}`;
+      : providerLabel.toLowerCase().includes('cloudflare')
+        ? 'Copy Cloudflare link'
+        : `Copy ${providerLabel} link`;
   const statusLabelFor = (state: ReturnType<typeof deployResultState>) => {
     if (state === 'ready') return t('fileViewer.deployLinkReady');
     if (state === 'protected') return t('fileViewer.deployLinkProtectedLabel');
@@ -6094,6 +6231,13 @@ function HtmlViewer({
       onRedo={() => {
         void redoManualEdit();
       }}
+      floatingStyle={selectedManualEditTarget
+        ? manualEditFloatingPanelStyle(
+            selectedManualEditTarget,
+            overlayPreviewScale,
+            previewBodySize,
+          )
+        : undefined}
       onPickImage={async (pickedFile) => {
         const result = await uploadProjectFiles(projectId, [pickedFile]);
         const uploaded = result.uploaded[0];
@@ -6467,9 +6611,62 @@ function HtmlViewer({
               </button>
               {shareMenuOpen ? (
                 <div className="share-menu-popover" role="menu">
+                  {deployCopyLinks.length > 0 ? (
+                    <>
+                      <div className="share-menu-section-label" role="presentation">
+                        SHARE LINK
+                      </div>
+                      {deployCopyLinks.map((item) => (
+                        <button
+                          key={`copy-${item.providerId}`}
+                          type="button"
+                          className="share-menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setShareMenuOpen(false);
+                            void copyDeployLink(item.url);
+                          }}
+                        >
+                          <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
+                          <span>{copyDeployMenuLabel(item.providerLabel, item.url)}</span>
+                        </button>
+                      ))}
+                      <div className="share-menu-divider" />
+                    </>
+                  ) : null}
+                  <div className="share-menu-section-label" role="presentation">
+                    PUBLISH ONLINE
+                  </div>
+                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        const format =
+                          option.id === 'cloudflare-pages'
+                            ? 'cloudflare_pages'
+                            : option.id === 'vercel-self'
+                              ? 'vercel'
+                              : 'vercel';
+                        fireShareExport(format, () => openDeployModal(option.id));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="upload-cloud-line" size={15} /></span>
+                      <span>{deployActionLabelFor(option.id)}</span>
+                    </button>
+                  ))}
+                  <div className="share-menu-divider" />
+                  <div className="share-menu-section-label" role="presentation">
+                    DOWNLOAD
+                  </div>
+                  <div className="share-menu-subsection-label" role="presentation">
+                    Presentation
+                  </div>
                   <button
                     type="button"
-                    className="share-menu-item"
+                    className="share-menu-item share-menu-subitem"
                     role="menuitem"
                     onClick={() => {
                       setShareMenuOpen(false);
@@ -6491,7 +6688,7 @@ function HtmlViewer({
                   </button>
                   <button
                     type="button"
-                    className="share-menu-item"
+                    className="share-menu-item share-menu-subitem"
                     role="menuitem"
                     disabled={!canPptx}
                     title={
@@ -6511,58 +6708,10 @@ function HtmlViewer({
                     <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
                     <span>{t('fileViewer.exportPptx') + '…'}</span>
                   </button>
-                  <div className="share-menu-divider" />
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('zip', () => exportProjectAsZip({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                      }));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
-                    <span>{t('fileViewer.exportZip')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
-                    <span>{t('fileViewer.exportHtml')}</span>
-                  </button>
-                  {/* Export as Markdown — pass-through download of the
-                      artifact source with a `.md` extension. No conversion
-                      runs; the file body is identical to the Source view.
-                      Useful for piping the artifact into markdown-aware
-                      tooling (LLM context windows, vault apps). See
-                      issue #279. */}
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>{t('fileViewer.exportMd')}</span>
-                  </button>
                   {!useUrlLoadPreview ? (
                     <button
                       type="button"
-                      className="share-menu-item"
+                      className="share-menu-item share-menu-subitem"
                       role="menuitem"
                       onClick={async () => {
                         setShareMenuOpen(false);
@@ -6586,7 +6735,60 @@ function HtmlViewer({
                       <span>{t('fileViewer.exportImage')}</span>
                     </button>
                   ) : null}
+                  <div className="share-menu-subsection-label" role="presentation">
+                    Source files
+                  </div>
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      fireShareExport('zip', () => exportProjectAsZip({
+                        projectId,
+                        filePath: file.name,
+                        fallbackHtml: source ?? '',
+                        fallbackTitle: exportTitle,
+                      }));
+                    }}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
+                    <span>{t('fileViewer.exportZip')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
+                    }}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
+                    <span>{t('fileViewer.exportHtml')}</span>
+                  </button>
+                  {/* Export as Markdown — pass-through download of the
+                      artifact source with a `.md` extension. No conversion
+                      runs; the file body is identical to the Source view.
+                      Useful for piping the artifact into markdown-aware
+                      tooling (LLM context windows, vault apps). See
+                      issue #279. */}
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
+                    }}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                    <span>{t('fileViewer.exportMd')}</span>
+                  </button>
                   <div className="share-menu-divider" />
+                  <div className="share-menu-section-label" role="presentation">
+                    SAVE
+                  </div>
                   <button
                     type="button"
                     className="share-menu-item"
@@ -6607,45 +6809,6 @@ function HtmlViewer({
                           : t('fileViewer.saveAsTemplate')}
                     </span>
                   </button>
-                  <div className="share-menu-divider" />
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        const format =
-                          option.id === 'cloudflare-pages'
-                            ? 'cloudflare_pages'
-                            : option.id === 'vercel-self'
-                              ? 'vercel'
-                              : 'vercel';
-                        fireShareExport(format, () => openDeployModal(option.id));
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="upload-cloud-line" size={15} /></span>
-                      <span>{deployActionLabelFor(option.id)}</span>
-                    </button>
-                  ))}
-                  {deployCopyLinks.length > 0 ? (
-                    <div className="share-menu-divider" />
-                  ) : null}
-                  {deployCopyLinks.map((item) => (
-                    <button
-                      key={`copy-${item.providerId}`}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setShareMenuOpen(false);
-                        void copyDeployLink(item.url);
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                      <span>{copyDeployMenuLabel(item.providerLabel, item.url)}</span>
-                    </button>
-                  ))}
                 </div>
               ) : null}
             </div>
@@ -6815,11 +6978,11 @@ function HtmlViewer({
               <div className="screenshot-toast-anchor">
                 <div className="screenshot-toast" role="status" aria-live="polite">
                   <RemixIcon name="checkbox-circle-line" size={16} />
-                  <span>截图已保存到剪贴板</span>
+                  <span>{screenshotToast}</span>
                   <button
                     type="button"
                     aria-label={t('common.close')}
-                    onClick={() => setScreenshotToast(false)}
+                    onClick={() => setScreenshotToast(null)}
                   >
                     <RemixIcon name="close-line" size={16} />
                   </button>
