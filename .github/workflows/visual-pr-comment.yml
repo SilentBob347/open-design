@@ -92,20 +92,16 @@ jobs:
             echo "Invalid manifest pr_number: $manifest_pr_number" >&2
             exit 1
           fi
-          derived_pr_number="$WORKFLOW_PR_NUMBER"
-          if [ -z "$derived_pr_number" ] && [ -n "$WORKFLOW_HEAD_SHA" ]; then
-            derived_pr_number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls" --jq '.[0].number // empty')"
-          fi
-          pr_number="$derived_pr_number"
+          pr_number="$WORKFLOW_PR_NUMBER"
           if [ -z "$pr_number" ]; then
             pr_number="$manifest_pr_number"
           fi
           if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
-            echo "Unable to derive PR number from workflow event, capture manifest, or GitHub API for workflow head $WORKFLOW_HEAD_SHA." >&2
+            echo "Unable to derive PR number from workflow event or capture manifest for workflow head $WORKFLOW_HEAD_SHA." >&2
             exit 1
           fi
-          if [ -n "$derived_pr_number" ] && [ "$manifest_pr_number" != "$derived_pr_number" ]; then
-            echo "Manifest pr_number ($manifest_pr_number) does not match GitHub-derived PR number ($derived_pr_number)." >&2
+          if [ -n "$WORKFLOW_PR_NUMBER" ] && [ "$manifest_pr_number" != "$WORKFLOW_PR_NUMBER" ]; then
+            echo "Manifest pr_number ($manifest_pr_number) does not match workflow_run PR number ($WORKFLOW_PR_NUMBER)." >&2
             exit 1
           fi
           if ! [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -168,11 +164,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate live PR state for trusted checkout
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name != github.repository }}
         id: trusted-pr
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
           ARTIFACT_HEAD_SHA: ${{ steps.manifest.outputs.head_sha }}
           ARTIFACT_BASE_SHA: ${{ steps.manifest.outputs.base_sha }}
@@ -180,6 +176,17 @@ jobs:
           SOURCE_HEAD_BRANCH: ${{ steps.manifest.outputs.source_head_branch }}
         run: |
           set -euo pipefail
+          skip_or_fail_stale() {
+            local message="$1"
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "$message" >&2
+              exit 1
+            fi
+            echo "$message"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
           pr_json="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           pr_state="$(jq -r '.state' <<< "$pr_json")"
           pr_is_draft="$(jq -r '.draft' <<< "$pr_json")"
@@ -189,20 +196,16 @@ jobs:
           current_head_repository="$(jq -r '.head.repo.full_name // empty' <<< "$pr_json")"
           current_head_branch="$(jq -r '.head.ref // empty' <<< "$pr_json")"
           if [ "$pr_state" != "open" ]; then
-            echo "Refusing trusted checkout for PR $PR_NUMBER because state is $pr_state." >&2
-            exit 1
+            skip_or_fail_stale "Skipping trusted checkout for PR $PR_NUMBER because state is $pr_state."
           fi
           if [ "$pr_is_draft" != "false" ]; then
-            echo "Refusing trusted checkout for PR $PR_NUMBER because it is draft." >&2
-            exit 1
+            skip_or_fail_stale "Skipping trusted checkout for PR $PR_NUMBER because it is draft."
           fi
           if [ "$current_head" != "$ARTIFACT_HEAD_SHA" ]; then
-            echo "Artifact head_sha ($ARTIFACT_HEAD_SHA) does not match live PR head ($current_head)." >&2
-            exit 1
+            skip_or_fail_stale "Skipping stale visual artifact for $ARTIFACT_HEAD_SHA; current PR head is $current_head."
           fi
           if [ "$current_base" != "$ARTIFACT_BASE_SHA" ]; then
-            echo "Artifact base_sha ($ARTIFACT_BASE_SHA) does not match live PR base ($current_base)." >&2
-            exit 1
+            skip_or_fail_stale "Skipping stale visual artifact for base $ARTIFACT_BASE_SHA; current PR base is $current_base."
           fi
           if [ "$current_head_repository" != "$SOURCE_HEAD_REPOSITORY" ]; then
             echo "Artifact PR head repository ($current_head_repository) does not match trusted workflow_run head repository ($SOURCE_HEAD_REPOSITORY)." >&2
@@ -213,12 +216,13 @@ jobs:
             exit 1
           fi
           {
+            echo "stale=false"
             echo "base_sha=$current_base"
             echo "is_cross_repository=$pr_is_cross_repository"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout trusted base revision
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name != github.repository }}
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name != github.repository) }}
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
@@ -226,20 +230,24 @@ jobs:
           ref: ${{ steps.trusted-pr.outputs.base_sha }}
 
       - name: Resolve pnpm store path
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
         id: pnpm-store
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Restore pnpm store cache
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
         uses: actions/cache/restore@v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Stop stale visual runs
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
         id: stale
         env:
           GH_TOKEN: ${{ github.token }}
@@ -276,7 +284,7 @@ jobs:
           echo "stale=false" >> "$GITHUB_OUTPUT"
 
       - name: Build visual diff report
-        if: ${{ steps.stale.outputs.stale != 'true' }}
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -300,7 +308,7 @@ jobs:
             --manifest-out ui/reports/visual-report/report-manifest.json
 
       - name: Upsert PR comment
-        if: ${{ steps.stale.outputs.stale != 'true' }}
+        if: ${{ steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
@@ -340,7 +348,7 @@ jobs:
           fi
 
       - name: Upload visual report artifact
-        if: ${{ always() && steps.stale.outputs.stale != 'true' }}
+        if: ${{ always() && steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: visual-pr-report-${{ steps.manifest.outputs.pr_number }}-${{ steps.manifest.outputs.run_id }}
