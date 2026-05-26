@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -11,6 +12,17 @@ import {
   runTargetsPullRequest,
   waitForPendingApprovalRuns,
 } from "./approve-fork-pr-workflows.ts";
+
+test("visual-pr-comment resolves empty workflow_run.pull_requests from trusted metadata only", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/visual-pr-comment.yml", import.meta.url), "utf8");
+  const manifestStep = workflow.match(/- name: Read capture manifest[\s\S]*?- name: Validate live PR state for trusted checkout/u)?.[0];
+
+  assert.ok(manifestStep, "Expected Read capture manifest step block in workflow");
+  assert.match(manifestStep, /pulls\?state=open&head=\$head_owner:\$source_head_branch&per_page=100/);
+  assert.match(manifestStep, /match_count=.*wc -w/u);
+  assert.match(manifestStep, /found \$match_count matches/);
+  assert.doesNotMatch(manifestStep, /pr_number="\$manifest_pr_number"/);
+});
 
 test("isPendingApprovalRun matches approval-gated fork PR runs from GitHub's captured payload shape", () => {
   const pull = {

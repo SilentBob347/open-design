@@ -176,6 +176,55 @@ describe('visual report PNG sizing', () => {
       await rm(workDir, { recursive: true, force: true });
     }
   });
+
+  test('huge-dimension PNG headers fail before decode and upload', async () => {
+    const workDir = await mkdtemp(path.join(tmpdir(), 'visual-report-'));
+    try {
+      const outputDir = path.join(workDir, 'output');
+      const badPath = path.join(workDir, 'visual-huge.png');
+      await writeFile(badPath, createHugeHeaderPng(100_000, 100_000));
+
+      const uploadedKeys: string[] = [];
+      const r2 = {
+        bucket: 'visual-bucket',
+        publicOrigin: 'https://example.invalid',
+        client: {} as never,
+      };
+
+      const result = await compareCase(
+        {
+          r2,
+          prNumber: '12',
+          runId: '34',
+          headSha: 'b'.repeat(40),
+          visualCase: { name: 'visual-huge', path: badPath },
+          candidateShas: ['c'.repeat(40)],
+          outputDir,
+        },
+        {
+          putFile: async (_r2: unknown, key: string) => {
+            uploadedKeys.push(key);
+          },
+          findBaseline: async () => null,
+          downloadObject: async () => {
+            throw new Error('download should not run');
+          },
+          writeDiffPng: async () => {
+            throw new Error('diff should not run');
+          },
+        },
+      );
+
+      expect(result).toMatchObject({
+        name: 'visual-huge',
+        status: 'failed',
+        error: expect.stringMatching(/maximum allowed is 4000000 pixels/),
+      });
+      expect(uploadedKeys).toEqual([]);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('visual diff box extraction', () => {
@@ -271,6 +320,21 @@ function createFilledPng(width: number, height: number): PNG {
     }
   }
   return png;
+}
+
+function createHugeHeaderPng(width: number, height: number): Buffer {
+  const buffer = Buffer.alloc(33);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(buffer, 0);
+  buffer.writeUInt32BE(13, 8);
+  buffer.write('IHDR', 12, 'ascii');
+  buffer.writeUInt32BE(width, 16);
+  buffer.writeUInt32BE(height, 20);
+  buffer[24] = 8;
+  buffer[25] = 6;
+  buffer[26] = 0;
+  buffer[27] = 0;
+  buffer[28] = 0;
+  return buffer;
 }
 
 function redPixels(png: PNG): string[] {

@@ -454,8 +454,27 @@ function setPixel(png: PNG, x: number, y: number, color: readonly [number, numbe
 }
 
 async function validatePngFile(filePath: string): Promise<void> {
-  const png = PNG.sync.read(await readFile(filePath));
+  const buffer = await readFile(filePath);
+  assertPngHeaderSize(buffer, filePath);
+  const png = PNG.sync.read(buffer);
   assertPngSize(png, filePath);
+}
+
+function assertPngHeaderSize(buffer: Buffer, filePath: string): void {
+  if (buffer.length < 24) {
+    throw new Error(`Visual case ${filePath} is not a valid PNG file`);
+  }
+  const signature = buffer.subarray(0, 8);
+  const expectedSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (!signature.equals(expectedSignature)) {
+    throw new Error(`Visual case ${filePath} is not a valid PNG file`);
+  }
+  const ihdrLength = buffer.readUInt32BE(8);
+  const chunkType = buffer.toString('ascii', 12, 16);
+  if (ihdrLength !== 13 || chunkType !== 'IHDR') {
+    throw new Error(`Visual case ${filePath} is not a valid PNG file`);
+  }
+  assertPngPixels(buffer.readUInt32BE(16), buffer.readUInt32BE(20), filePath);
 }
 
 function assertPngSize(png: PNG, filePath: string): void {
